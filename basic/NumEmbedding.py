@@ -1,10 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from basic.Embedding import Embedding
-from basic.GlobalAttention import GlobalAttention
-from basic.util import StackLSTM, RNNDecoderState
-from basic import util
 
 PAD_WORD = '<blank>'
 UNK_WORD = '<unk>'
@@ -13,9 +9,9 @@ BOS_WORD = '<s>'
 EOS_WORD = '</s>'
 
 
-class S2SModel(nn.Module):
-    def __init__(self, config, vocab):
-        super(S2SModel, self).__init__()
+class NumEmbedding(nn.Module):
+    def __init__(self, config):
+        super(NumEmbedding, self).__init__()
         # params
         self.ifgpu = config.gpu
         self.dec_dim = config.decoder_dim
@@ -23,22 +19,15 @@ class S2SModel(nn.Module):
         self.tgt_emb_dim = config.tgt_emb_dim
         self.copy = config.copy_attn
         self.reuse_copy_attn = config.reuse_copy_attn
-        self.vocab = vocab
+
         self.eps = 1e-20
         self.force_copy = False
-        self.pad = self.vocab['tgt'].stoi[PAD_WORD]
         self.normalize_by_length = True
-        self.offset = len(self.vocab['tgt'].itos)
-
 
         # encoder and decoder
-        self.src_embedding = Embedding(config)
+        #self.src_embedding = Embedding(config)
         self.tgt_embeddings = nn.Embedding(config.tgt_vocab_size, self.tgt_emb_dim, padding_idx=config.pad_ind)
-        self.decoder = StackLSTM(config)
-        self.attn = GlobalAttention(config)
-        # copy attention
-        if self.copy and not self.reuse_copy_attn:
-            self.copy_attn = GlobalAttention(config)
+
         # generation
         self.gen_linear = nn.Linear(self.dec_dim, config.tgt_vocab_size)
         self.ifcopy_linear = nn.Linear(self.dec_dim, 1)
