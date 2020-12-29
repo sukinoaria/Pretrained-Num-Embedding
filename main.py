@@ -127,9 +127,9 @@ def main():
 
             optimizer.zero_grad()
 
-            decoder_outputs, attns, dec_state = model(src, tgt_inp_temp, src_lengths, dec_state)
+            decoder_outputs, attns, dec_state = model(src)
             loss, batch_stats = model.compute_loss(decoder_outputs, attns, tgt_oup_temp, src_map,
-                                                   align_temp, copy_vocab)
+                                                )
             loss.backward()  # no normalization
             if args.max_grad_norm:
                 torch.nn.utils.clip_grad_norm_(grouped_params, args.max_grad_norm)
@@ -183,6 +183,11 @@ def parse_args():
     parser.add_argument('--gpu', type=bool, default=False)
     parser.add_argument('--batch_size', type=int, default=2)
 
+    parser.add_argument('--proj_parts', type=list, default=[0,10,30,50,100,150])
+    parser.add_argument('--proj_dim', type=int, default=500)
+    parser.add_argument('--proj_bias', type=bool, default=True)
+
+
     parser.add_argument('--pad_ind', type=int, default=0)
     parser.add_argument('--src_vocab_size', type=list, default=[])
     parser.add_argument('--tgt_vocab_size', type=int, default=1000)
@@ -202,19 +207,12 @@ def parse_args():
 
     parser.add_argument('--num_layer', type=int, default=2)
     parser.add_argument('--decoder_dim', type=int, default=600)
-    parser.add_argument('--coverage_attn', type=bool, default=True)
-    parser.add_argument('--attn_type', type=str, default="mlp", choices=["dot", "general", "mlp"])
-
-    parser.add_argument('--reuse_copy_attn', type=bool, default=True)
 
     parser.add_argument('--reload', type=bool, default=False)
     parser.add_argument('--saved_epoch_num', type=int, default=0)
     parser.add_argument('--start_decay_at', type=int, default=15)
     parser.add_argument('--start_checkpoint_at', type=int, default=0)
 
-    parser.add_argument('--gen_length', type=int, default=200)
-    parser.add_argument('--min_length', type=int, default=100)
-    parser.add_argument('--max_length', type=int, default=400)
 
     args = parser.parse_args()
     return args
