@@ -39,14 +39,6 @@ class NumProjEmbedding(nn.Module):
         nn.init.kaiming_uniform_(self.quantify, a=math.sqrt(5))
 
     def forward(self, src):
-
-        '''
-        :param src: batch * src_len * feat_num
-        :param src_lengths: batch
-        :param tgt: batch * tgt_len
-        :param dec_state:
-        :return:
-        '''
         # build mask for weight selection
         batch_size,src_len = src.shape
         proj_parts = self.proj_parts.unsqueeze(0).repeat(batch_size*src_len,1)
@@ -56,13 +48,11 @@ class NumProjEmbedding(nn.Module):
         # select proj weights, calc project result
         weights = torch.index_select(self.weight,0,proj_idx)
         bias = torch.index_select(self.bias,0,proj_idx)
+        src = src.view(batch_size*src_len,1).repeat(1,self.out_dim)
+        projected = weights * src + bias
 
-        # todo wx+b
-
-
-
-
-
+        # mult the quantify matrix
+        proj_state = torch.matmul(projected,self.quantify)
         return proj_state
 
 
