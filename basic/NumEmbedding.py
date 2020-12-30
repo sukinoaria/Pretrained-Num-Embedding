@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from basic.NumProjEmbedding import NumProjEmbedding
+from basic.Static import Statistics
+from basic.NumProjLayer import NumProjLayer
 
 PAD_WORD = '<blank>'
 UNK_WORD = '<unk>'
@@ -16,122 +17,57 @@ class NumEmbedding(nn.Module):
         super(NumEmbedding, self).__init__()
         # params
         self.ifgpu = config.gpu
-        self.dec_dim = config.decoder_dim
-
-        self.tgt_emb_dim = config.tgt_emb_dim
-
-        self.eps = 1e-20
-        self.force_copy = False
-        self.normalize_by_length = True
+        self.hinge_loss_delta = torch.tensor(config.hinge_loss_delta)
 
         # modules
-        self.numProj = NumProjEmbedding(config)
+        self.numProj = NumProjLayer(config)
 
-        self.tgt_embeddings = nn.Embedding(config.tgt_vocab_size, self.tgt_emb_dim, padding_idx=config.pad_ind)
+        # transformer encoder
+        encoder_layer = nn.TransformerEncoderLayer(d_model=config.proj_dim,nhead=config.num_emb_ahead)
+        self.encoder = nn.TransformerEncoder(encoder_layer,num_layers=config.num_emb_layer)
 
-        # generation
-        self.gen_linear = nn.Linear(self.dec_dim, config.tgt_vocab_size)
-
-        self.drop = nn.Dropout(config.dropout_rate)
-
+        # mlp layer for loss calc
+        self.score_linear = nn.Linear(config.proj_dim, 1)
 
     def forward(self, src):
-
-        '''
-        :param src: batch * src_len * feat_num
-        :param src_lengths: batch
-        :param tgt: batch * tgt_len
-        :param dec_state:
-        :return:
-        '''
         proj_state = self.numProj(src)
+        out = self.encoder(proj_state)
+        return out
 
-        # transformer layer
-
-        decoder_outputs, attns, dec_state = self.decode(tgt, enc_state if dec_state is None else dec_state,
-                                                        src_lengths, memory_bank)
-        return decoder_outputs, attns, dec_state
-
-    def compute_loss(self, decoder_outputs, attns, tgt, src_map, alignment, copy_vocab):
-        '''
-        :param decoder_outputs: tgt_len * batch * dim
-        :param attns: tgt_len * batch * src_len for each
-        :param tgt: batch * tgt_len
-        :param src_map: batch * src_len * copy_vocab_len
-        :param alignment: batch * tgt_len
-        :param copy_vocab:
-        :return:
-        '''
+    def compute_loss(self, encoder_state, tgt, tgt_lengths, src_mask):
         batch_size = tgt.size(0)
-        tlen = tgt.size(-1)
+        tgt_len = tgt.size(1)
 
-        decoder_outputs = decoder_outputs.transpose(0, 1).contiguous()  # batch * tgt_len * dim
-        decoder_outputs = decoder_outputs.view(-1, decoder_outputs.size(-1))  # (batch * tgt_len) * dim
+        out_scores = F.sigmoid(self.score_linear(encoder_state)).squeeze()
 
-        copy_attn = attns['copy'].transpose(0, 1).contiguous()  # batch * tgt_len * src_len
-        copy_attn = copy_attn.view(-1, copy_attn.size(-1))  # (batch * tgt_len) * src_len
+        # calc hinge loss
+        scores_minus = out_scores.unsqueeze(2).repeat(1,1,tgt_len) - out_scores.unsqueeze(1).repeat(1,tgt_len,1)
 
-        target = tgt.contiguous().view(-1)  # (batch * tgt_len)
-        align = alignment.contiguous().view(-1)  # (batch * tgt_len)
-        assert target.size(0) == align.size(0)
+        nums_minus = tgt.unsqueeze(2).repeat(1,1,tgt_len) - tgt.unsqueeze(1).repeat(1,tgt_len,1)
+        T_nums = torch.ge(nums_minus,0) # true,false for >=, <
+        T_gt = T_nums.float() + (~T_nums).float()*-1
 
-        prob = self.compute_prob_w_copy(decoder_outputs, copy_attn, src_map)
-        # (batch * tgt_len) * (tgt_vocab_len+copy_vocab_len)
+        # build mask for loss sumarizition, not conside i to i loss
+        loss_mask = src_mask.unsqueeze(1).repeat(1,tgt_len,1) * src_mask.unsqueeze(2).repeat(1,1,tgt_len)
+        eye_matrix = torch.stack([torch.eye(tgt_len) for _ in range(batch_size)])
+        loss_mask -= eye_matrix * loss_mask
 
-        # Compute unks in align and target for readability
-        align_unk = align.eq(0).float()
-        align_not_unk = align.ne(0).float()
-        target_unk = target.eq(0).float()
-        target_not_unk = target.ne(0).float()  # (batch * tgt_len)
+        # calc each loss for token i and j
+        loss_matrix = self.hinge_loss_delta - T_gt * scores_minus
+        zero_matrix = torch.zeros(batch_size,tgt_len,tgt_len)
+        pos_loss = torch.max(loss_matrix,zero_matrix)
 
-        # Copy probability of tokens in source
-        out = prob.gather(1, align.view(-1, 1) + self.offset).view(-1)  # (batch * tgt_len)
-        # Set scores for unk to 0 and add eps
-        out = out.mul(align_not_unk) + self.eps
-        # Get scores for tokens in target
-        tmp = prob.gather(1, target.view(-1, 1)).view(-1)  # (batch * tgt_len)
+        #sum up and divide lenth^2 to get average loss
+        masked_pos_loss = pos_loss * loss_mask
+        pos_loss_sum = torch.sum(masked_pos_loss.view(batch_size,-1),dim=1)
+        averaged_loss = torch.sum(pos_loss_sum / (tgt_lengths ** 2))
 
-        # Regular prob (no unks and unks that can't be copied)
-        if not self.force_copy:
-            # Add score for non-unks in target
-            out = out + tmp.mul(target_not_unk)
-            # Add score for when word is unk in both align and tgt
-            out = out + tmp.mul(align_unk).mul(target_unk)
-        else:
-            # Forced copy. Add only probability for not-copied tokens
-            out = out + tmp.mul(align_unk)
+        # get static information
+        pred_bool_mask = torch.ge(scores_minus,0)
+        pred_result = pred_bool_mask.float() + (~pred_bool_mask).float()*-1
+        masked_pred_result = pred_result * T_gt * loss_mask
+        correct_nums = torch.sum(torch.gt(masked_pred_result,0))
+        stats = Statistics(averaged_loss.item(),loss_mask.sum(),correct_nums)
 
-        # Drop padding.
-        loss = -out.log().mul(target.ne(self.pad).float())  # (batch * tgt_len)
-
-        scores_data = prob.data.clone()  # (batch * tgt_len) * (tgt_vocab_len+copy_vocab_len)
-        scores_data = scores_data.view(batch_size, tlen, -1)
-        scores_data = self.collapse_copy_scores(scores_data, copy_vocab)
-        scores_data = scores_data.view(batch_size * tlen, -1)
-
-        # Correct target copy token instead of <unk>
-        target_data = target.data.clone()
-        correct_mask = target_data.eq(0) * align.data.ne(0)
-        correct_copy = (align.data + len(self.vocab['tgt'].itos)) * correct_mask.long()
-        target_data = target_data + correct_copy  # (batch * tgt_len)
-
-        # Compute sum of perplexities for stats
-        loss_data = loss.sum().data.clone()
-        pred = scores_data.max(1)[1]
-        non_padding = target.ne(self.pad)
-        num_correct = pred.eq(target_data).masked_select(non_padding).sum()  # (batch * tgt_no_pad_len)
-
-        if self.normalize_by_length:
-            # Compute Loss as NLL divided by seq length
-            # Compute Sequence Lengths
-            tgt_lens = tgt.ne(self.pad).float().sum(1) + 1  # batch
-            # Compute Total Loss per sequence in batch
-            loss = loss.view(batch_size, -1).sum(1)  # batch
-            # Divide by length of each sequence and sum
-            loss = torch.div(loss, tgt_lens).sum()
-        else:
-            loss = loss.sum()
-        stats = util.Statistics(loss.item(), non_padding.sum(), num_correct)
-
-        return loss, stats
+        return averaged_loss, stats, masked_pred_result
 

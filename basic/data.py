@@ -75,21 +75,15 @@ class ScoreDataset(object):
             max_seq_len = src_lengths.max()
 
             src = (torch.ones(batch, max_seq_len)*self.pad_id).long()
-
             src_mask = (torch.zeros(batch, max_seq_len)).float()
-
-            tgt = (torch.ones(batch, max_seq_len)*self.pad_id).long()
 
             for idx in range(len(instances)):
                 temp_src_len = len(instances[idx])
                 src[idx, :temp_src_len] = torch.LongTensor(instances[idx])
                 src_mask[idx, :temp_src_len] = torch.ones(temp_src_len)
 
-                # todo add process for target
-
             if self.ifgpu:
                 src = src.cuda()
-                tgt = tgt.cuda()
                 src_mask = src_mask.cuda()
                 src_lengths = src_lengths.cuda()
-            yield step, self.get_batch_num(), src, tgt, src_lengths, src_mask
+            yield step, self.get_batch_num(), src, src_lengths, src_mask

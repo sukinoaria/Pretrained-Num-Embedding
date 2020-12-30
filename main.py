@@ -18,6 +18,48 @@ random.seed(seed_num)
 torch.manual_seed(seed_num)
 np.random.seed(seed_num)
 
+def process_preds(src,pred_results):
+    sents = []
+    batch_size,src_length = src.size(0),src.size(1)
+    for i in range(batch_size):
+        sent = []
+        sequence,result = src[i], pred_results[i]
+        nonzero_idxes = result.nonzero()
+        for idx_x,idx_y in nonzero_idxes:
+            if result[idx_x,idx_y] == 1:
+                sent.append("{} > {}".format(sequence[idx_x],sequence[idx_y]))
+            else:
+                sent.append("{} < {}".format(sequence[idx_x], sequence[idx_y]))
+        sent_str = ",".join(sent)
+        sents.append(sent_str)
+    return sents
+
+def valid(model, batch_generator,dataset, output_path):
+    model.eval()
+    stats = Statistics()
+    correct_words_total, pred_words_total = 0, 0
+    all_sents = []
+    for id, (step, batch_num, src, src_lengths, src_mask) in enumerate(batch_generator):
+        encoder_state = model(src)
+        loss, batch_stats,pred_results = model.compute_loss(encoder_state, src, src_lengths, src_mask)
+
+        stats.update(batch_stats)
+        correct_words_total += stats.n_correct
+        pred_words_total += stats.n_words
+
+        sents = process_preds(src,pred_results)
+        all_sents.extend(sents)
+    logging.info("{} AVG SCORE: {} = {} / {}".format(dataset,
+        correct_words_total / (pred_words_total + 1e-6), correct_words_total, pred_words_total))
+
+    output_file = open(output_path, 'w', encoding='utf-8')
+    for s in all_sents:
+        output_file.write(s+"\n")
+    output_file.close()
+
+    return stats
+
+
 def main():
     args = parse_args()
     # make dir
@@ -120,26 +162,18 @@ def main():
 
         total_stats = Statistics()
         report_stats = Statistics()
-        for id, (step, batch_num, src, tgt, src_lengths, src_mask) in enumerate(batch_generator):
-
-            report_stats.n_src_words += src_lengths.sum().item()
-            total_stats.n_src_words += src_lengths.sum().item()
+        for id, (step, batch_num, src, src_lengths, src_mask) in enumerate(batch_generator):
 
             optimizer.zero_grad()
 
-            decoder_outputs, attns, dec_state = model(src)
-            loss, batch_stats = model.compute_loss(decoder_outputs, attns, tgt_oup_temp, src_map,
-                                                )
+            encoder_state = model(src)
+            loss, batch_stats,_ = model.compute_loss(encoder_state, src,src_lengths, src_mask)
             loss.backward()  # no normalization
             if args.max_grad_norm:
                 torch.nn.utils.clip_grad_norm_(grouped_params, args.max_grad_norm)
             optimizer.step()
             total_stats.update(batch_stats)
             report_stats.update(batch_stats)
-
-            # If truncated, don't backprop fully.
-            if dec_state is not None:
-                dec_state.detach()
 
             # log
             if step % 100 == 0:
@@ -155,9 +189,8 @@ def main():
 
         # validation
         batch_generator_dev = dev_dataset.get_batch_data()
-        dev_state = valid(model, batch_generator_dev)
+        dev_state = valid(model, batch_generator_dev,"DEV",args.output_path+str(epoch)+"_dev.txt")
         dev_state.output_dev(epoch)
-        # logging.info(dev_state.ppl())
 
         # save checkpoint
         if epoch > args.start_checkpoint_at:
@@ -166,14 +199,13 @@ def main():
 
         # test
         batch_generator_test = test_dataset.get_batch_data()
-        test(model, batch_generator_test, args.beam_size, args.min_length, args.max_length,
-            vocab_dict['tgt'], args.output_path+str(epoch)+".txt", args.gpu)
-
+        test_state = valid(model, batch_generator_test,"TEST", args.output_path+str(epoch)+"_test.txt")
+        test_state.output_dev(epoch)
 
 def parse_args():
     # config
     parser = argparse.ArgumentParser(description='numberic embedding')
-    parser.add_argument('--model_name', type=str, default="initial_pretrain_num_emb")
+    parser.add_argument('--model_name', type=str, default="test1")
     parser.add_argument('--data_name', type=str, default="rotowire")
     parser.add_argument('--data_path', type=str, default="data/")
     parser.add_argument('--model_path', type=str, default="model/")
@@ -183,21 +215,16 @@ def parse_args():
     parser.add_argument('--gpu', type=bool, default=False)
     parser.add_argument('--batch_size', type=int, default=2)
 
+    # num embedding
     parser.add_argument('--proj_parts', type=list, default=[0,10,30,50,100,150])
-    parser.add_argument('--proj_dim', type=int, default=500)
+    parser.add_argument('--proj_dim', type=int, default=512)
     parser.add_argument('--proj_bias', type=bool, default=True)
-
+    parser.add_argument('--num_emb_ahead', type=int, default=8)
+    parser.add_argument('--num_emb_layer', type=int, default=6)
+    parser.add_argument('--hinge_loss_delta', type=float, default=.5)
 
     parser.add_argument('--pad_ind', type=int, default=0)
-    parser.add_argument('--src_vocab_size', type=list, default=[])
-    parser.add_argument('--tgt_vocab_size', type=int, default=1000)
-    parser.add_argument('--emb_size', type=int, default=600)
-    parser.add_argument('--emb_out_size', type=int, default=600)
-    parser.add_argument('--tgt_emb_dim', type=int, default=500)
-    parser.add_argument('--encoder_dim', type=int, default=600)
-
     parser.add_argument('--epoch_num', type=int, default=40)
-    parser.add_argument('--dropout_rate', type=float, default=0.2)
     parser.add_argument('--optim_type', type=str, default="adam",
                         choices=["adam", "sgd", "adagrad", "adadelta", "rmsprop"])
     parser.add_argument('--learning_rate', type=float, default=0.0005)
@@ -205,14 +232,10 @@ def parse_args():
     parser.add_argument('--learning_rate_decay', type=float, default=0.98)
     parser.add_argument('--max_grad_norm', type=float, default=5)
 
-    parser.add_argument('--num_layer', type=int, default=2)
-    parser.add_argument('--decoder_dim', type=int, default=600)
-
     parser.add_argument('--reload', type=bool, default=False)
     parser.add_argument('--saved_epoch_num', type=int, default=0)
     parser.add_argument('--start_decay_at', type=int, default=15)
     parser.add_argument('--start_checkpoint_at', type=int, default=0)
-
 
     args = parser.parse_args()
     return args

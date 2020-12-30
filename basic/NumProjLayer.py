@@ -10,9 +10,9 @@ BOS_WORD = '<s>'
 EOS_WORD = '</s>'
 
 
-class NumProjEmbedding(nn.Module):
+class NumProjLayer(nn.Module):
     def __init__(self, config):
-        super(NumProjEmbedding, self).__init__()
+        super(NumProjLayer, self).__init__()
         # params
         self.ifgpu = config.gpu
         self.proj_parts = torch.Tensor(config.proj_parts).long()
@@ -52,7 +52,7 @@ class NumProjEmbedding(nn.Module):
         projected = weights * src + bias
 
         # mult the quantify matrix
-        proj_state = torch.matmul(projected,self.quantify)
+        proj_state = torch.matmul(projected,self.quantify).view(batch_size,src_len,-1)
         return proj_state
 
 
