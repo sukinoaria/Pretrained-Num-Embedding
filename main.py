@@ -79,9 +79,9 @@ def main():
 
     # read data
     data_dict = torch.load(args.data_path)
-    train_data = data_dict['train']
-    dev_data = data_dict['dev']
-    test_data = data_dict['test']
+    train_data = data_dict['train'][:10]
+    dev_data = data_dict['dev'][:10]
+    test_data = data_dict['test'][:10]
 
     logging.info('Num Data loaded...')
 
@@ -140,6 +140,7 @@ def main():
     last_ppl = None
     ppl = None
     lr = args.learning_rate
+    max_accuracy = -1
     for epoch in range(start_epoch, start_epoch + args.epoch_num):
         model.train()
 
@@ -162,6 +163,7 @@ def main():
 
         total_stats = Statistics()
         report_stats = Statistics()
+
         for id, (step, batch_num, src, src_lengths, src_mask) in enumerate(batch_generator):
 
             optimizer.zero_grad()
@@ -191,11 +193,12 @@ def main():
         batch_generator_dev = dev_dataset.get_batch_data()
         dev_state = valid(model, batch_generator_dev,"DEV",args.output_path+str(epoch)+"_dev.txt")
         dev_state.output_dev(epoch)
-
+        dev_accuracy = dev_state.accuracy()
         # save checkpoint
-        if epoch > args.start_checkpoint_at:
+        if epoch > args.start_checkpoint_at and dev_accuracy > max_accuracy:
             state = {'net': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
             torch.save(state, args.model_path + str(epoch) + '.pth')
+        max_accuracy = max(max_accuracy, dev_accuracy)
 
         # test
         batch_generator_test = test_dataset.get_batch_data()
@@ -235,7 +238,7 @@ def parse_args():
     parser.add_argument('--reload', type=bool, default=False)
     parser.add_argument('--saved_epoch_num', type=int, default=0)
     parser.add_argument('--start_decay_at', type=int, default=15)
-    parser.add_argument('--start_checkpoint_at', type=int, default=0)
+    parser.add_argument('--start_checkpoint_at', type=int, default=30)
 
     args = parser.parse_args()
     return args
