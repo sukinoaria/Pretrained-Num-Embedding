@@ -34,7 +34,7 @@ def process_preds(src,pred_results):
         sents.append(sent_str)
     return sents
 
-def valid(model, batch_generator,dataset, output_path):
+def valid(model, batch_generator,dataset, output_path,save_data):
     model.eval()
     stats = Statistics()
     correct_words_total, pred_words_total = 0, 0
@@ -47,15 +47,17 @@ def valid(model, batch_generator,dataset, output_path):
         correct_words_total += stats.n_correct
         pred_words_total += stats.n_words
 
-        sents = process_preds(src,pred_results)
-        all_sents.extend(sents)
+        if save_data:
+            sents = process_preds(src,pred_results)
+            all_sents.extend(sents)
     logging.info("{} AVG SCORE: {} = {} / {}".format(dataset,
         correct_words_total / (pred_words_total + 1e-6), correct_words_total, pred_words_total))
 
-    output_file = open(output_path, 'w', encoding='utf-8')
-    for s in all_sents:
-        output_file.write(s+"\n")
-    output_file.close()
+    if save_data:
+        output_file = open(output_path, 'w', encoding='utf-8')
+        for s in all_sents:
+            output_file.write(s+"\n")
+        output_file.close()
 
     return stats
 
@@ -79,9 +81,9 @@ def main():
 
     # read data
     data_dict = torch.load(args.data_path)
-    train_data = data_dict['train'][:10]
-    dev_data = data_dict['dev'][:10]
-    test_data = data_dict['test'][:10]
+    train_data = data_dict['train']
+    dev_data = data_dict['dev']
+    test_data = data_dict['test']
 
     logging.info('Num Data loaded...')
 
@@ -191,7 +193,7 @@ def main():
 
         # validation
         batch_generator_dev = dev_dataset.get_batch_data()
-        dev_state = valid(model, batch_generator_dev,"DEV",args.output_path+str(epoch)+"_dev.txt")
+        dev_state = valid(model, batch_generator_dev,"DEV",args.output_path+str(epoch)+"_dev.txt",False)
         dev_state.output_dev(epoch)
         dev_accuracy = dev_state.accuracy()
         # save checkpoint
@@ -202,21 +204,21 @@ def main():
 
         # test
         batch_generator_test = test_dataset.get_batch_data()
-        test_state = valid(model, batch_generator_test,"TEST", args.output_path+str(epoch)+"_test.txt")
+        test_state = valid(model, batch_generator_test,"TEST", args.output_path+str(epoch)+"_test.txt",args.saved_test_data)
         test_state.output_dev(epoch)
 
 def parse_args():
     # config
     parser = argparse.ArgumentParser(description='numberic embedding')
-    parser.add_argument('--model_name', type=str, default="test1")
+    parser.add_argument('--model_name', type=str, default="gpu_train")
     parser.add_argument('--data_name', type=str, default="rotowire")
     parser.add_argument('--data_path', type=str, default="data/")
     parser.add_argument('--model_path', type=str, default="model/")
     parser.add_argument('--output_path', type=str, default="output/")
     parser.add_argument('--log_path', type=str, default="log/")
 
-    parser.add_argument('--gpu', type=bool, default=False)
-    parser.add_argument('--batch_size', type=int, default=2)
+    parser.add_argument('--gpu', type=bool, default=True)
+    parser.add_argument('--batch_size', type=int, default=128)
 
     # num embedding
     parser.add_argument('--proj_parts', type=list, default=[0,10,30,50,100,150])
@@ -237,6 +239,7 @@ def parse_args():
 
     parser.add_argument('--reload', type=bool, default=False)
     parser.add_argument('--saved_epoch_num', type=int, default=0)
+    parser.add_argument('--saved_test_data', type=bool, default=False)
     parser.add_argument('--start_decay_at', type=int, default=15)
     parser.add_argument('--start_checkpoint_at', type=int, default=30)
 

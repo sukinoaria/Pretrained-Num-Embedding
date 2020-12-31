@@ -50,11 +50,14 @@ class NumEmbedding(nn.Module):
         # build mask for loss sumarizition, not conside i to i loss
         loss_mask = src_mask.unsqueeze(1).repeat(1,tgt_len,1) * src_mask.unsqueeze(2).repeat(1,1,tgt_len)
         eye_matrix = torch.stack([torch.eye(tgt_len) for _ in range(batch_size)])
+        if self.ifgpu: eye_matrix = eye_matrix.cuda()
+
         loss_mask -= eye_matrix * loss_mask
 
         # calc each loss for token i and j
         loss_matrix = self.hinge_loss_delta - T_gt * scores_minus
         zero_matrix = torch.zeros(batch_size,tgt_len,tgt_len)
+        if self.ifgpu: zero_matrix = zero_matrix.cuda()
         pos_loss = torch.max(loss_matrix,zero_matrix)
 
         #sum up and divide lenth^2 to get average loss

@@ -29,6 +29,8 @@ class NumProjLayer(nn.Module):
         self.quantify = nn.Parameter(torch.Tensor(self.out_dim,self.out_dim))
 
         self.reset_parameters()
+        if self.ifgpu:
+            self.proj_parts = self.proj_parts.cuda()
 
     def reset_parameters(self) -> None:
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
