@@ -210,7 +210,7 @@ def main():
 def parse_args():
     # config
     parser = argparse.ArgumentParser(description='numberic embedding')
-    parser.add_argument('--model_name', type=str, default="gpu_train")
+    parser.add_argument('--model_name', type=str, default="32batch_moreparts")
     parser.add_argument('--data_name', type=str, default="rotowire")
     parser.add_argument('--data_path', type=str, default="data/")
     parser.add_argument('--model_path', type=str, default="model/")
@@ -218,15 +218,15 @@ def parse_args():
     parser.add_argument('--log_path', type=str, default="log/")
 
     parser.add_argument('--gpu', type=bool, default=True)
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=32)
 
     # num embedding
-    parser.add_argument('--proj_parts', type=list, default=[0,10,30,50,100,150])
+    parser.add_argument('--proj_parts', type=list, default=[0,5,10,30,50,100,150])
     parser.add_argument('--proj_dim', type=int, default=512)
     parser.add_argument('--proj_bias', type=bool, default=True)
     parser.add_argument('--num_emb_ahead', type=int, default=8)
     parser.add_argument('--num_emb_layer', type=int, default=6)
-    parser.add_argument('--hinge_loss_delta', type=float, default=.5)
+    parser.add_argument('--hinge_loss_delta', type=float, default=.3)
 
     parser.add_argument('--pad_ind', type=int, default=0)
     parser.add_argument('--epoch_num', type=int, default=40)
