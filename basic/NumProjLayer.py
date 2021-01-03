@@ -54,8 +54,8 @@ class NumProjLayer(nn.Module):
         projected = weights * src + bias
 
         # mult the quantify matrix
-        proj_state = torch.matmul(projected,self.quantify).view(batch_size,src_len,-1)
-        return proj_state
+        proj_state = torch.matmul(projected,self.quantify)
+        return proj_state.view(batch_size,src_len,-1)
 
 
 

@@ -38,7 +38,7 @@ class NumEmbedding(nn.Module):
         batch_size = tgt.size(0)
         tgt_len = tgt.size(1)
 
-        out_scores = F.sigmoid(self.score_linear(encoder_state)).squeeze()
+        out_scores = torch.sigmoid(self.score_linear(encoder_state)).squeeze()
 
         # calc hinge loss
         scores_minus = out_scores.unsqueeze(2).repeat(1,1,tgt_len) - out_scores.unsqueeze(1).repeat(1,tgt_len,1)

@@ -50,6 +50,8 @@ def valid(model, batch_generator,dataset, output_path,save_data):
         if save_data:
             sents = process_preds(src,pred_results)
             all_sents.extend(sents)
+    print("{} AVG SCORE: {} = {} / {}".format(dataset,
+                                                     correct_words_total / (pred_words_total + 1e-6), correct_words_total, pred_words_total))
     logging.info("{} AVG SCORE: {} = {} / {}".format(dataset,
         correct_words_total / (pred_words_total + 1e-6), correct_words_total, pred_words_total))
 
@@ -86,6 +88,7 @@ def main():
     test_data = data_dict['test']
 
     logging.info('Num Data loaded...')
+    print('Num Data loaded...')
 
     # train batch
     train_dataset = ScoreDataset(train_data, 'train', args.batch_size, args.pad_ind, args.gpu)
@@ -210,7 +213,7 @@ def main():
 def parse_args():
     # config
     parser = argparse.ArgumentParser(description='numberic embedding')
-    parser.add_argument('--model_name', type=str, default="32batch_moreparts")
+    parser.add_argument('--model_name', type=str, default="5base_32batch_1024dim_1e5lr")
     parser.add_argument('--data_name', type=str, default="rotowire")
     parser.add_argument('--data_path', type=str, default="data/")
     parser.add_argument('--model_path', type=str, default="model/")
@@ -221,18 +224,19 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=32)
 
     # num embedding
-    parser.add_argument('--proj_parts', type=list, default=[0,5,10,30,50,100,150])
-    parser.add_argument('--proj_dim', type=int, default=512)
+    parts = [i for i in range(151)]
+    parser.add_argument('--proj_parts', type=list, default=parts)
+    parser.add_argument('--proj_dim', type=int, default=1024)
     parser.add_argument('--proj_bias', type=bool, default=True)
     parser.add_argument('--num_emb_ahead', type=int, default=8)
     parser.add_argument('--num_emb_layer', type=int, default=6)
-    parser.add_argument('--hinge_loss_delta', type=float, default=.3)
+    parser.add_argument('--hinge_loss_delta', type=float, default=.1)
 
     parser.add_argument('--pad_ind', type=int, default=0)
     parser.add_argument('--epoch_num', type=int, default=40)
     parser.add_argument('--optim_type', type=str, default="adam",
                         choices=["adam", "sgd", "adagrad", "adadelta", "rmsprop"])
-    parser.add_argument('--learning_rate', type=float, default=0.0005)
+    parser.add_argument('--learning_rate', type=float, default=0.0001)
     parser.add_argument('--adagrad_accum', type=float, default=0.15)
     parser.add_argument('--learning_rate_decay', type=float, default=0.98)
     parser.add_argument('--max_grad_norm', type=float, default=5)
@@ -241,7 +245,7 @@ def parse_args():
     parser.add_argument('--saved_epoch_num', type=int, default=0)
     parser.add_argument('--saved_test_data', type=bool, default=False)
     parser.add_argument('--start_decay_at', type=int, default=15)
-    parser.add_argument('--start_checkpoint_at', type=int, default=30)
+    parser.add_argument('--start_checkpoint_at', type=int, default=0)
 
     args = parser.parse_args()
     return args

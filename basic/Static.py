@@ -29,6 +29,12 @@ class Statistics(object):
 
     def output(self, epoch, batch, n_batches):
         t = self.elapsed_time()
+        print(("Epoch %2d, %5d/%5d; loss: %6.2f; acc: %6.2f; " +
+                      "%3.0f tgt tok/s; %6.0f s elapsed") %
+                     (epoch, batch, n_batches, self.loss,
+                      self.accuracy(),
+                      self.n_words / (t + 1e-5),
+                      t))
         logging.info(("Epoch %2d, %5d/%5d; loss: %6.2f; acc: %6.2f; " +
                       "%3.0f tgt tok/s; %6.0f s elapsed") %
                      (epoch, batch, n_batches, self.loss,
@@ -37,6 +43,12 @@ class Statistics(object):
                       t))
     def output_dev(self, epoch):
         t = self.elapsed_time()
+        print(("Dev:   Epoch %2d; loss: %6.2f; acc: %6.2f; " +
+                      "%3.0f tgt tok/s; %6.0f s elapsed") %
+                     (epoch, self.loss,
+                      self.accuracy(),
+                      self.n_words / (t + 1e-5),
+                      t))
         logging.info(("Dev:   Epoch %2d; loss: %6.2f; acc: %6.2f; " +
                       "%3.0f tgt tok/s; %6.0f s elapsed") %
                      (epoch, self.loss,
