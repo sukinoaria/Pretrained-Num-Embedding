@@ -41,8 +41,8 @@ def valid(model, batch_generator,dataset, output_path,save_data):
     all_sents = []
     for id, (step, batch_num, src, src_lengths, src_mask) in enumerate(batch_generator):
         encoder_state = model(src)
-        loss, batch_stats,pred_results = model.compute_loss(encoder_state, src, src_lengths, src_mask)
-
+        loss, stats,pred_results = model.compute_loss(encoder_state, src, src_lengths, src_mask)
+        batch_stats = Statistics(stats[0], stats[1], stats[2])
         stats.update(batch_stats)
         correct_words_total += stats.n_correct
         pred_words_total += stats.n_words
@@ -174,7 +174,8 @@ def main():
             optimizer.zero_grad()
 
             encoder_state = model(src)
-            loss, batch_stats,_ = model.compute_loss(encoder_state, src,src_lengths, src_mask)
+            loss, stats,_ = model.compute_loss(encoder_state, src,src_lengths, src_mask)
+            batch_stats = Statistics(stats[0],stats[1],stats[2])
             loss.backward()  # no normalization
             if args.max_grad_norm:
                 torch.nn.utils.clip_grad_norm_(grouped_params, args.max_grad_norm)

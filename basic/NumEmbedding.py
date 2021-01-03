@@ -1,8 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-from basic.Static import Statistics
 from basic.NumProjLayer import NumProjLayer
 
 PAD_WORD = '<blank>'
@@ -74,7 +71,9 @@ class NumEmbedding(nn.Module):
         pred_result = pred_bool_mask.float() + (~pred_bool_mask).float()*-1
         masked_pred_result = pred_result * T_gt * loss_mask
         correct_nums = torch.sum(torch.gt(masked_pred_result,0))
-        stats = Statistics(averaged_loss.item(),loss_mask.sum(),correct_nums)
+
+        #stats = Statistics(averaged_loss.item(),loss_mask.sum(),correct_nums)
+        stats = (averaged_loss.item(), loss_mask.sum(), correct_nums)
 
         return averaged_loss, stats, masked_pred_result
 
