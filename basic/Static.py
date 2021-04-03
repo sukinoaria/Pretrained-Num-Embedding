@@ -42,16 +42,4 @@ class Statistics(object):
                       self.n_words / (t + 1e-5),
                       t))
     def output_dev(self, epoch):
-        t = self.elapsed_time()
-        print(("Dev:   Epoch %2d; loss: %6.2f; acc: %6.2f; " +
-                      "%3.0f tgt tok/s; %6.0f s elapsed") %
-                     (epoch, self.loss,
-                      self.accuracy(),
-                      self.n_words / (t + 1e-5),
-                      t))
-        logging.info(("Dev:   Epoch %2d; loss: %6.2f; acc: %6.2f; " +
-                      "%3.0f tgt tok/s; %6.0f s elapsed") %
-                     (epoch, self.loss,
-                      self.accuracy(),
-                      self.n_words / (t + 1e-5),
-                      t))
+        pass

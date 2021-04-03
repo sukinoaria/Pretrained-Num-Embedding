@@ -41,11 +41,11 @@ def valid(model, batch_generator,dataset, output_path,save_data):
     all_sents = []
     for id, (step, batch_num, src, src_lengths, src_mask) in enumerate(batch_generator):
         encoder_state = model(src)
-        loss, stats,pred_results = model.compute_loss(encoder_state, src, src_lengths, src_mask)
-        batch_stats = Statistics(stats[0], stats[1], stats[2])
+        loss, cur_stats,pred_results = model.compute_loss(encoder_state, src, src_lengths, src_mask)
+        batch_stats = Statistics(cur_stats[0], cur_stats[1], cur_stats[2])
         stats.update(batch_stats)
-        correct_words_total += stats.n_correct
-        pred_words_total += stats.n_words
+        correct_words_total += batch_stats.n_correct
+        pred_words_total += batch_stats.n_words
 
         if save_data:
             sents = process_preds(src,pred_results)
@@ -67,7 +67,7 @@ def valid(model, batch_generator,dataset, output_path,save_data):
 def main():
     args = parse_args()
     # make dir
-    args.data_path = args.data_path + args.data_name + "/nums.pt"
+    args.data_path = args.data_name + "/nums.pt"
     args.model_path = args.model_path + args.data_name + "/" + args.model_name + "/"
     args.output_path = args.output_path + args.data_name + "/" + args.model_name + "/"
     args.log_path = args.log_path + args.data_name + "/"
@@ -100,19 +100,8 @@ def main():
     if args.gpu:
         model = model.cuda()
 
-    # checkpoint = torch.load(
-    #     '/home/chenshaowei/AAAI2021/model/rotowire/2_0.005lr_0trunc/20.pth')
-    # model.load_state_dict(checkpoint['net'])
-    # batch_generator_test = test_dataset.get_batch_data()
-    # test(model, batch_generator_test, args.beam_size, args.min_length, args.max_length,
-    #      vocab_dict['tgt'], args.output_path + str(28) + "_beam_2.txt", args.gpu)
-    # exit(0)
-
     # optimizer
     param_list = list(model.named_parameters())
-    # for n, p in param_list:
-    #     if p.requires_grad == True:
-    #         print(n)
     grouped_params = [p for n, p in param_list if p.requires_grad == True]
 
     # make optimizer
@@ -187,13 +176,6 @@ def main():
             if step % 100 == 0:
                 report_stats.output(epoch, step, batch_num)
                 report_stats = Statistics()
-            # if step / 100 == 3:
-            #     state = {'net': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
-            #     torch.save(state, args.model_path + str(epoch) + '.pth')
-            #     batch_generator_test = test_dataset.get_batch_data()
-            #
-            #     test_greedy(model, batch_generator_test, args.beam_size, args.min_length, args.max_length,
-            #          vocab_dict['tgt'], args.output_path + str(epoch) + ".txt", args.gpu)
 
         # validation
         batch_generator_dev = dev_dataset.get_batch_data()
@@ -215,8 +197,7 @@ def parse_args():
     # config
     parser = argparse.ArgumentParser(description='numberic embedding')
     parser.add_argument('--model_name', type=str, default="5base_32batch_1024dim_1e5lr")
-    parser.add_argument('--data_name', type=str, default="rotowire")
-    parser.add_argument('--data_path', type=str, default="data/")
+    parser.add_argument('--data_name', type=str, default="data/")
     parser.add_argument('--model_path', type=str, default="model/")
     parser.add_argument('--output_path', type=str, default="output/")
     parser.add_argument('--log_path', type=str, default="log/")
